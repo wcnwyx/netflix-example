@@ -9,7 +9,7 @@
     <packaging>pom</packaging>
     <version>1.0</version>
     <modules>
-        <module>ribbon</module>
+        <module>netflix-ribbon</module>
     </modules>
 
     <properties>
