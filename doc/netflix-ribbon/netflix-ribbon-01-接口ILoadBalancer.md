@@ -19,17 +19,17 @@ public interface ILoadBalancer {
 	 * (helpful in cases where you want to give more "weightage" perhaps ..)
 	 * 
 	 * 初始化服务列表。
-     * 这个APi也提供后期添加额外的数据。
-     * 同一逻辑服务器（host:port一样）本质上可以添加多次
-     * （在你想赋予更多的权重的时候很有帮助）
+	 * 这个APi也提供后期添加额外的数据。
+	 * 同一逻辑服务器（host:port一样）本质上可以添加多次
+	 * （在你想赋予更多的权重的时候很有帮助）
 	 */
 	public void addServers(List<Server> newServers);
 	
 	/**
 	 * Choose a server from load balancer.
 	 * 
-     * 从负载均衡器里选择一个服务。
-     * 负载均衡器用该key确认返回哪个服务。可以为null   
+	 * 从负载均衡器里选择一个服务。
+	 * 负载均衡器用该key确认返回哪个服务。可以为null   
 	 */
 	public Server chooseServer(Object key);
 	
@@ -38,23 +38,23 @@ public interface ILoadBalancer {
 	 * else, the LB will think its still Alive until the next Ping cycle - potentially
 	 * (assuming that the LB Impl does a ping)
 	 * 
-     * 以负载均衡器的客户端调用通知一个服务已下线，
-     * 知道下一个Ping周期负载均衡器认为其仍然有效
-     * （假设该负载均衡器实现了Ping）
-     * 
+	 * 以负载均衡器的客户端调用通知一个服务已下线，
+	 * 知道下一个Ping周期负载均衡器认为其仍然有效
+	 * （假设该负载均衡器实现了Ping）
+	 * 
 	 */
 	public void markServerDown(Server server);
 	
 	/**
 	 * @return Only the servers that are up and reachable.
-     * 只返回up状态并且可达的服务
-     */
-    public List<Server> getReachableServers();
+	 * 只返回up状态并且可达的服务
+	 */
+	public List<Server> getReachableServers();
 
-    /**
-     * @return All known servers, both reachable and unreachable.
-     * 返回所有一直的服务，包括可达的和不可达的。
-     */
+	/**
+	 * @return All known servers, both reachable and unreachable.
+	 * 返回所有一直的服务，包括可达的和不可达的。
+	 */
 	public List<Server> getAllServers();
 }
 ```

@@ -117,7 +117,7 @@ public class RoundRobinRule extends AbstractLoadBalancerRule {
 }
 ```
 
-##实现类
+##实现类RandomRule（随机）
 ```java
 /**
  * A loadbalacing strategy that randomly distributes traffic amongst existing

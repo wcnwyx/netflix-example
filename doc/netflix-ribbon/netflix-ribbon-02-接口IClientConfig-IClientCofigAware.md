@@ -72,3 +72,24 @@ public class DefaultClientConfigImpl implements IClientConfig {
     
 }
 ```
+
+
+##接口IClientConfigAware
+ribbon中很多类都实现了该接口，比如说（BaseLoadBalancer、AbstractLoadBalancerRule、LoadBalancerStats、LoadBalancerContext）  
+因为ribbon本身就是一个客户端类型的负载均衡，很多类都需要依赖于配置文件来初始化。  
+```java
+/**
+ * There are multiple classes (and components) that need access to the configuration.
+ * Its easier to do this by using {@link IClientConfig} as the object that carries these configurations
+ * and to define a common interface that components that need this can implement and hence be aware of.
+ *
+ * 有多个类（和组件）需要访问配置。
+ * 通过使用IClientConfig作为携带这些配置的对象，并定义一个公共接口，实现它的接口可以实现并因此意识到，这样做更容易。
+ * 就是说通过实现这个接口，通过接口方法中传入的IClientConfig对象来进行初始化。
+ */
+public interface IClientConfigAware {
+
+    public abstract void initWithNiwsConfig(IClientConfig clientConfig);
+    
+}
+```
