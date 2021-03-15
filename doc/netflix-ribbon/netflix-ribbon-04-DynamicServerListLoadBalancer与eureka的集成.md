@@ -1,6 +1,6 @@
 DynamicServerListLoadBalancer为ILoadBalancer的一个实现类，采用策略模式实现了动态获取服务列表的能力，也是ribbon-eureka的切入点。  
 先看下类注释。  
-##DynamicServerListLoadBalancer预览   
+##1: DynamicServerListLoadBalancer预览   
 ```java
 /**
  * A LoadBalancer that has the capabilities to obtain the candidate list of
@@ -32,7 +32,7 @@ public class DynamicServerListLoadBalancer<T extends Server> extends BaseLoadBal
 
 策略就是ServerList这个接口，动态性就体现在ServerListUpdater里，下面先看下这两个接口。
 
-##ServerList接口
+##2: ServerList接口
 ```java
 /**
  * Interface that defines the methods sed to obtain the List of Servers
@@ -53,7 +53,7 @@ public interface ServerList<T extends Server> {
 }
 ```
 
-###ServerList接口实现类-ConfigurationBasedServerList
+###2.1: ServerList接口实现类-ConfigurationBasedServerList
 ```java
 /**
  * Utility class that can load the List of Servers from a Configuration (i.e
@@ -99,7 +99,7 @@ public class ConfigurationBasedServerList extends AbstractServerList<Server>  {
 }
 ```
 
-###ServerList接口实现类-DiscoveryEnabledNIWSServerList
+###2.2: ServerList接口实现类-DiscoveryEnabledNIWSServerList
 该类是ribbon-eureka提供的，用于ribbon中动态从eureka中获取服务器列表的策略。  
 ```java
 /**
@@ -200,7 +200,7 @@ public class DiscoveryEnabledNIWSServerList extends AbstractServerList<Discovery
 }
 ```
 
-##ServerListUpdater接口
+##3: ServerListUpdater接口
 根据接口名字其实也可以知道它是用来做ServerList的更新操作的。  
 ```java
 /**
@@ -262,7 +262,135 @@ public interface ServerListUpdater {
 ```
 
 
-###ServerListUpdater接口实现类-EurekaNotificationServerListUpdater
+###3.1: ServerListUpdater接口实现类-PollingServerListUpdater
+EurekaNotificationServerListUpdater是ribbon自带的一个默认实现类。  
+```java
+/**
+ * A default strategy for the dynamic server list updater to update.
+ *
+ * 一个默认的策略来更新ServerList
+ */
+public class PollingServerListUpdater implements ServerListUpdater {
+
+    private static final Logger logger = LoggerFactory.getLogger(PollingServerListUpdater.class);
+
+    private static long LISTOFSERVERS_CACHE_UPDATE_DELAY = 1000; // msecs;
+    private static int LISTOFSERVERS_CACHE_REPEAT_INTERVAL = 30 * 1000; // msecs;
+
+    //该类就是为了持有一个线程池，用于定时地更新ServerList操作
+    private static class LazyHolder {
+        private final static String CORE_THREAD = "DynamicServerListLoadBalancer.ThreadPoolSize";
+        private final static DynamicIntProperty poolSizeProp = new DynamicIntProperty(CORE_THREAD, 2);
+        private static Thread _shutdownThread;
+
+        static ScheduledThreadPoolExecutor _serverListRefreshExecutor = null;
+
+        static {
+            int coreSize = poolSizeProp.get();
+            ThreadFactory factory = (new ThreadFactoryBuilder())
+                    .setNameFormat("PollingServerListUpdater-%d")
+                    .setDaemon(true)
+                    .build();
+            _serverListRefreshExecutor = new ScheduledThreadPoolExecutor(coreSize, factory);
+            poolSizeProp.addCallback(new Runnable() {
+                @Override
+                public void run() {
+                    _serverListRefreshExecutor.setCorePoolSize(poolSizeProp.get());
+                }
+
+            });
+            _shutdownThread = new Thread(new Runnable() {
+                public void run() {
+                    logger.info("Shutting down the Executor Pool for PollingServerListUpdater");
+                    shutdownExecutorPool();
+                }
+            });
+            Runtime.getRuntime().addShutdownHook(_shutdownThread);
+        }
+
+        private static void shutdownExecutorPool() {
+            if (_serverListRefreshExecutor != null) {
+                _serverListRefreshExecutor.shutdown();
+
+                if (_shutdownThread != null) {
+                    try {
+                        Runtime.getRuntime().removeShutdownHook(_shutdownThread);
+                    } catch (IllegalStateException ise) { // NOPMD
+                        // this can happen if we're in the middle of a real
+                        // shutdown,
+                        // and that's 'ok'
+                    }
+                }
+
+            }
+        }
+    }
+
+    private static ScheduledThreadPoolExecutor getRefreshExecutor() {
+        return LazyHolder._serverListRefreshExecutor;
+    }
+
+
+    private final AtomicBoolean isActive = new AtomicBoolean(false);
+    private volatile long lastUpdated = System.currentTimeMillis();
+    private final long initialDelayMs;
+    private final long refreshIntervalMs;
+
+    private volatile ScheduledFuture<?> scheduledFuture;
+
+    public PollingServerListUpdater(final long initialDelayMs, final long refreshIntervalMs) {
+        this.initialDelayMs = initialDelayMs;
+        this.refreshIntervalMs = refreshIntervalMs;
+    }
+
+    @Override
+    public synchronized void start(final UpdateAction updateAction) {
+        if (isActive.compareAndSet(false, true)) {
+            final Runnable wrapperRunnable = new Runnable() {
+                @Override
+                public void run() {
+                    if (!isActive.get()) {
+                        if (scheduledFuture != null) {
+                            scheduledFuture.cancel(true);
+                        }
+                        return;
+                    }
+                    try {
+                        updateAction.doUpdate();
+                        lastUpdated = System.currentTimeMillis();
+                    } catch (Exception e) {
+                        logger.warn("Failed one update cycle", e);
+                    }
+                }
+            };
+            
+            //定时执行updateAction.doUpdate()
+            scheduledFuture = getRefreshExecutor().scheduleWithFixedDelay(
+                    wrapperRunnable,
+                    initialDelayMs,
+                    refreshIntervalMs,
+                    TimeUnit.MILLISECONDS
+            );
+        } else {
+            logger.info("Already active, no-op");
+        }
+    }
+
+    @Override
+    public synchronized void stop() {
+        if (isActive.compareAndSet(true, false)) {
+            if (scheduledFuture != null) {
+                scheduledFuture.cancel(true);
+            }
+        } else {
+            logger.info("Not active, no-op");
+        }
+    }
+
+}
+```
+
+###3.2: ServerListUpdater接口实现类-EurekaNotificationServerListUpdater
 该类也是使用在ribbon从eureka动态获取服务器信息的情况下。ServerListUpdater也有默认的一个实现，就不看了  
 ```java
 /**
@@ -435,34 +563,10 @@ public class EurekaNotificationServerListUpdater implements ServerListUpdater {
         }
     }
 
-    @Override
-    public String getLastUpdate() {
-        return new Date(lastUpdated.get()).toString();
-    }
-
-    @Override
-    public long getDurationSinceLastUpdateMs() {
-        return System.currentTimeMillis() - lastUpdated.get();
-    }
-
-    @Override
-    public int getNumberMissedCycles() {
-        return 0;
-    }
-
-    @Override
-    public int getCoreThreads() {
-        if (isActive.get()) {
-            if (refreshExecutor != null && refreshExecutor instanceof ThreadPoolExecutor) {
-                return ((ThreadPoolExecutor) refreshExecutor).getCorePoolSize();
-            }
-        }
-        return 0;
-    }
 }
 ```
 
-##再看DynamicServerListLoadBalancer
+##4: 再看DynamicServerListLoadBalancer
 ```java
 /**
  * A LoadBalancer that has the capabilities to obtain the candidate list of
@@ -536,7 +640,7 @@ public class DynamicServerListLoadBalancer<T extends Server> extends BaseLoadBal
     }
 }
 ```
-##总结：
+##5: 总结：
 1. DynamicServerListLoadBalancer是一个ILoadBalancer的实现类，使用策略模式实现了从动态源获取服务器列表的功能（比如eureka中），并可以附带一个过滤器。
 2. ServerList的eureka实现是从eurekaClient中通过getInstancesByVipAddress方法获取服务列表信息。
 3. ServerListUpdater的eureka实现是通过EurekaEventListener来实现动态更新的。
