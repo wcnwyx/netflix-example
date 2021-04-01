@@ -1,7 +1,9 @@
 package com.wcnwyx.zuul.example;
 
 import com.netflix.zuul.ZuulFilter;
+import com.netflix.zuul.constants.ZuulConstants;
 import com.netflix.zuul.context.RequestContext;
+import com.netflix.zuul.exception.ZuulException;
 import com.netflix.zuul.filters.FilterRegistry;
 import com.netflix.zuul.http.ZuulServlet;
 import com.netflix.zuul.monitoring.MonitoringHelper;
@@ -9,6 +11,7 @@ import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 
+import javax.servlet.http.HttpServletRequest;
 import java.net.MalformedURLException;
 import java.net.URL;
 
@@ -32,57 +35,10 @@ public class ZuulMain {
     private static void initJavaFilters() {
         final FilterRegistry r = FilterRegistry.instance();
 
-        r.put("javaPreFilter", new ZuulFilter() {
-            @Override
-            public int filterOrder() {
-                return 50000;
-            }
+        r.put("javaPreFilter", new PreRouteFilter());
 
-            @Override
-            public String filterType() {
-                return "pre";
-            }
+        r.put("javaRouteFilter", new RouteFilter());
 
-            @Override
-            public boolean shouldFilter() {
-                return true;
-            }
-
-            @Override
-            public Object run() {
-                System.out.println("running javaPreFilter");
-                RequestContext.getCurrentContext().set("javaPreFilter-ran", true);
-                try {
-                    RequestContext.getCurrentContext().setRouteHost(new URL("http://apache.org/"));
-                } catch (MalformedURLException e) {
-                    e.printStackTrace();
-                }
-                return null;
-            }
-        });
-
-        r.put("javaPostFilter", new ZuulFilter() {
-            @Override
-            public int filterOrder() {
-                return 50000;
-            }
-
-            @Override
-            public String filterType() {
-                return "post";
-            }
-
-            @Override
-            public boolean shouldFilter() {
-                return true;
-            }
-
-            @Override
-            public Object run() {
-                System.out.println("running javaPostFilter");
-                RequestContext.getCurrentContext().set("javaPostFilter-ran", true);
-                return null;
-            }
-        });
+        r.put("javaPostFilter", new PostRouteFilter());
     }
 }
